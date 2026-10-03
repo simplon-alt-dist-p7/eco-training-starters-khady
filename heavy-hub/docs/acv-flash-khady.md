@@ -1,5 +1,7 @@
 # ACV Flash
 
+**Support visuel** : [ACV MentorPromo sur Miro](https://miro.com/welcomeonboard/azBKaFlpR1RqR1hRc2FBT0lnbUlKb3hIdUNuWTVmbmgvckpIdGd0SlU0VFEwNCthNXRLa09JWjNuTERxNEJXNHBzajYvVmFMaE9HOVJQdnBDZWlnd1JON1UyOGU2STZxYWdmcy9NTVJWQ0gyREt4bEFyRXRsYlR1TTB6QXNMMFd3VHhHVHd5UWtSM1BidUtUYmxycDRnPT0hdjE=?share_link_id=643304053230) · [Bonnes pratiques (Excel)](https://docs.google.com/spreadsheets/d/1WRLaJbdfu5FhS5ES2Kp1FJ6S3ScEpGz2/edit?usp=sharing)
+
 ---
 
 ## 1. Mon service numérique
@@ -43,9 +45,9 @@ Il repose sur une plateforme web, hébergée dans le cloud, avec :
 
 ## 2. Unité fonctionnelle (UF)
 
-Chaque session de mentorat dure au minimum **30 minutes**.
+**UF : une session de mentorat de 30 minutes sur MentorPromo** - connexion, recherche d'un mentor dans l'annuaire, consultation de son profil, envoi ou suivi d'une demande de contact.
 
-> Contexte d'usage : réalisé depuis (reste à voir…).
+> Contexte d'usage (hypothèse à valider) : depuis un ordinateur portable, en wifi (box fibre), en France.
 
 ---
 
@@ -75,8 +77,8 @@ Chaque session de mentorat dure au minimum **30 minutes**.
 ### 3.4 Use Phase  Phase d'usage (temps passé, fonctionnalités, fréquence)
 
 - Usage du navigateur pour accéder à l'interface
-- Calcul de l'analyse via appel API depuis le back-end
-- Écriture / lecture en base de données (score, rapport)
+- Traitement des requêtes par l'API back-end (recherche, filtres, profils)
+- Écriture / lecture en base de données (profils, demandes de contact)
 - Consultation annuaire + filtres : chargements répétés
 - Ouverture profils mentors : lecture des infos + tags + disponibilités
 - Envoi de demande de contact : saisie du message, validations, envoi, réception email/notification (usage plus « lourd » ponctuellement)

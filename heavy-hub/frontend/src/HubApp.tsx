@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, NavLink, Route, Routes, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom';
 
 type RawContentItem = {
   id: string;
@@ -186,6 +186,14 @@ function averageProgress(item: DisplayContentItem) {
   return Math.round(item.modules.reduce((total, module) => total + module.progress, 0) / item.modules.length);
 }
 
+function HubLoading({ message = 'Chargement de votre portail...' }: { message?: string }) {
+  return (
+    <main className="hub-loading-shell">
+      <p>{message}</p>
+    </main>
+  );
+}
+
 function PortalHeader({ unreadCount }: { unreadCount: number }) {
   return (
     <header className="hub-header">
@@ -215,7 +223,7 @@ function PortalHeader({ unreadCount }: { unreadCount: number }) {
 function ContentCard({ item, compact = false }: { item: DisplayContentItem; compact?: boolean }) {
   return (
     <article className={compact ? 'hub-content-card compact' : 'hub-content-card'}>
-      <img src={item.heroAsset} alt={item.title} />
+      <img src={item.heroAsset} alt={item.title} loading="lazy" decoding="async" />
       <div className="hub-card-copy">
         <div className="hub-meta-row">
           <span>{item.track}</span>
@@ -550,11 +558,6 @@ function DashboardPage({
 }
 
 function NotificationsPage({ notifications, refresh }: { notifications: NotificationItem[]; refresh: () => void }) {
-  useEffect(() => {
-    const timer = window.setInterval(refresh, 7000);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
-
   const unread = notifications.filter((item) => !item.read).length;
   const priority = notifications.filter((item) => item.level === 'high').length;
 
@@ -581,6 +584,9 @@ function NotificationsPage({ notifications, refresh }: { notifications: Notifica
             <p className="hub-eyebrow">Messages</p>
             <h2>Fil d activite</h2>
           </div>
+          <button type="button" onClick={refresh}>
+            Actualiser
+          </button>
         </div>
         <div className="hub-notification-list">
           {notifications.map((item) => (
@@ -653,10 +659,11 @@ function ProfilePage({ profile, items }: { profile: ProfilePayload; items: Displ
 }
 
 export default function HubApp() {
+  const location = useLocation();
   const [home, setHome] = useState<HomePayload | null>(null);
-  const [library, setLibrary] = useState<DisplayContentItem[]>([]);
+  const [library, setLibrary] = useState<DisplayContentItem[] | null>(null);
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[] | null>(null);
   const [profile, setProfile] = useState<ProfilePayload | null>(null);
 
   const refreshNotifications = () => {
@@ -666,24 +673,41 @@ export default function HubApp() {
   };
 
   useEffect(() => {
-    Promise.all([
-      fetchJson<HomePayload>('/api/home'),
-      fetchJson<RawContentItem[]>('/api/library'),
-      fetchJson<DashboardPayload>('/api/dashboard'),
-      fetchJson<NotificationsPayload>('/api/notifications'),
-      fetchJson<ProfilePayload>('/api/profile')
-    ]).then(([homePayload, libraryPayload, dashboardPayload, notificationsPayload, profilePayload]) => {
-      setHome(homePayload);
-      setLibrary(libraryPayload.map(decorateContent));
-      setDashboard(dashboardPayload);
-      setNotifications(decorateNotifications(notificationsPayload));
-      setProfile(profilePayload);
-      window.localStorage.setItem(
-        'hub-snapshot',
-        JSON.stringify({ homePayload, libraryPayload, dashboardPayload, notificationsPayload, profilePayload })
-      );
-    });
+    Promise.all([fetchJson<HomePayload>('/api/home'), fetchJson<DashboardPayload>('/api/dashboard')]).then(
+      ([homePayload, dashboardPayload]) => {
+        setHome(homePayload);
+        setDashboard(dashboardPayload);
+      }
+    );
   }, []);
+
+  // Endpoints deja demandes : evite un second appel tant que le premier n'a pas repondu.
+  const requested = useRef(new Set<string>());
+
+  useEffect(() => {
+    const path = location.pathname;
+    const loadOnce = (endpoint: string, load: () => void) => {
+      if (requested.current.has(endpoint)) return;
+      requested.current.add(endpoint);
+      load();
+    };
+
+    if (path.startsWith('/library') || path.startsWith('/content') || path === '/profile') {
+      loadOnce('library', () =>
+        fetchJson<RawContentItem[]>('/api/library').then((libraryPayload) => {
+          setLibrary(libraryPayload.map(decorateContent));
+        })
+      );
+    }
+
+    if (path === '/dashboard' || path === '/profile') {
+      loadOnce('profile', () => fetchJson<ProfilePayload>('/api/profile').then(setProfile));
+    }
+
+    if (path === '/notifications') {
+      loadOnce('notifications', refreshNotifications);
+    }
+  }, [location.pathname]);
 
   const focusItems = useMemo(() => {
     return dashboard ? dashboard.focus.map(decorateContent) : [];
@@ -693,24 +717,66 @@ export default function HubApp() {
     return home ? home.featured.map(decorateContent) : [];
   }, [home]);
 
-  if (!home || !dashboard || !profile) {
-    return <main className="hub-loading-shell"><p>Chargement de votre portail...</p></main>;
+  const unreadCount = notifications ? notifications.filter((item) => !item.read).length : 0;
+
+  if (!home || !dashboard) {
+    return <HubLoading />;
   }
 
   return (
     <div className="hub-app">
-      <PortalHeader unreadCount={notifications.filter((item) => !item.read).length} />
+      <PortalHeader unreadCount={unreadCount} />
       <main className="hub-main">
         <Routes>
           <Route
             path="/"
-            element={<HomePage home={home} featured={featuredItems} dashboard={dashboard} notifications={notifications} />}
+            element={
+              <HomePage
+                home={home}
+                featured={featuredItems}
+                dashboard={dashboard}
+                notifications={notifications ?? []}
+              />
+            }
           />
-          <Route path="/library" element={<LibraryPage items={library} />} />
-          <Route path="/content/:id" element={<ContentPage items={library} />} />
-          <Route path="/dashboard" element={<DashboardPage dashboard={dashboard} focus={focusItems} profile={profile} />} />
-          <Route path="/notifications" element={<NotificationsPage notifications={notifications} refresh={refreshNotifications} />} />
-          <Route path="/profile" element={<ProfilePage profile={profile} items={library} />} />
+          <Route
+            path="/library"
+            element={library === null ? <HubLoading message="Chargement de la bibliotheque..." /> : <LibraryPage items={library} />}
+          />
+          <Route
+            path="/content/:id"
+            element={library === null ? <HubLoading message="Chargement du contenu..." /> : <ContentPage items={library} />}
+          />
+          <Route
+            path="/dashboard"
+            element={
+              profile === null ? (
+                <HubLoading message="Chargement du suivi..." />
+              ) : (
+                <DashboardPage dashboard={dashboard} focus={focusItems} profile={profile} />
+              )
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              notifications === null ? (
+                <HubLoading message="Chargement des messages..." />
+              ) : (
+                <NotificationsPage notifications={notifications} refresh={refreshNotifications} />
+              )
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              profile === null || library === null ? (
+                <HubLoading message="Chargement du profil..." />
+              ) : (
+                <ProfilePage profile={profile} items={library} />
+              )
+            }
+          />
         </Routes>
       </main>
     </div>
